@@ -50,3 +50,7 @@ Clone repository with submodules.
 - [libvpx](https://www.webmproject.org/code/) & [libyuv](https://chromium.googlesource.com/libyuv/libyuv/) for video decoding
 - [VC-LTL5](https://github.com/Chuyu-Team/VC-LTL5) for native library build
 - All testers from CMST tester group.
+
+
+dotnet build WzComparerR2.sln in the repository folder
+everything there's a change in the code.
