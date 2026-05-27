@@ -68,37 +68,14 @@ namespace WzComparerR2
 
             Console.WriteLine("Loading Wz Structure...");
             Wz_Structure wz = new Wz_Structure();
-            try
-            {
-                wz.Load(baseWzPath, true);
-                
-                // For modern/Steam installations where WZs are split into sibling folders
-                string dataDir = Path.GetDirectoryName(Path.GetDirectoryName(baseWzPath));
-                if (!string.IsNullOrEmpty(dataDir))
-                {
-                    string stringWzPath = Path.Combine(dataDir, "String", "String.wz");
-                    if (File.Exists(stringWzPath) && wz.WzNode.FindNodeByPath("String.wz") == null)
-                    {
-                        Wz_Node stringNode = new Wz_Node(Path.GetFileName(stringWzPath));
-                        wz.LoadFile(stringWzPath, stringNode, true);
-                        wz.WzNode.Nodes.Add(stringNode);
-                        Console.WriteLine($"Loaded explicitly: {stringWzPath}");
-                    }
+            wz.WzNode = new Wz_Node(Path.GetFileName(baseWzPath));
+            wz.LoadFile(baseWzPath, wz.WzNode, true, true);
+            Console.WriteLine("Wz structure loaded.");
 
-                    string mapWzPath = Path.Combine(dataDir, "Map", "Map.wz");
-                    if (File.Exists(mapWzPath) && wz.WzNode.FindNodeByPath("Map.wz") == null)
-                    {
-                        Wz_Node mapNode = new Wz_Node(Path.GetFileName(mapWzPath));
-                        wz.LoadFile(mapWzPath, mapNode, true);
-                        wz.WzNode.Nodes.Add(mapNode);
-                        Console.WriteLine($"Loaded explicitly: {mapWzPath}");
-                    }
-                }
-            }
-            catch (Exception ex)
+            Console.WriteLine("Root nodes:");
+            foreach (Wz_Node n in wz.WzNode.Nodes)
             {
-                Console.WriteLine($"Failed to load wz: {ex.Message}");
-                return;
+                Console.WriteLine($"  [{n.Text}] children: {n.Nodes.Count}");
             }
 
             // Extract Map Registry from String.wz -> Map.img
@@ -106,7 +83,6 @@ namespace WzComparerR2
             var mapRegistry = new List<MapRegistryEntry>();
 
             Wz_Node stringWz = wz.WzNode.FindNodeByPath("String.wz") ?? wz.WzNode.FindNodeByPath("String");
-            Console.WriteLine(stringWz);
             if (stringWz == null)
             {
                 stringWz = wz.WzNode.Nodes.FirstOrDefault(n => n.Text.Equals("String.wz", StringComparison.OrdinalIgnoreCase) || n.Text.Equals("String", StringComparison.OrdinalIgnoreCase));
@@ -114,14 +90,9 @@ namespace WzComparerR2
 
             if (stringWz != null)
             {
-                // The Wz_File object holds the real node tree — unwrap it
-                Wz_File stringFile = stringWz.GetValueEx<Wz_File>(null);
-                Wz_Node searchRoot = stringFile?.Node ?? stringWz;
+                Console.WriteLine($"String node found: {stringWz.Text}, children: {stringWz.Nodes.Count}");
 
-                Console.WriteLine($"String searchRoot: {searchRoot.Text}, children: {searchRoot.Nodes.Count}");
-
-                // Force-extract all img nodes under the real root
-                foreach (Wz_Node child in searchRoot.Nodes)
+                foreach (Wz_Node child in stringWz.Nodes)
                 {
                     Wz_Image wzImg = child.GetValueEx<Wz_Image>(null);
                     if (wzImg != null)
@@ -130,11 +101,12 @@ namespace WzComparerR2
                     }
                 }
 
-                Wz_Node mapImg = searchRoot.FindNodeByPath("Map.img", true)
-                            ?? searchRoot.FindNodeByPath(true, true, "Map.img");
-                  
+                Wz_Node mapImg = stringWz.FindNodeByPath("Map.img", true)
+                            ?? stringWz.FindNodeByPath(true, true, "Map.img");
+
                 if (mapImg != null)
                 {
+                    Console.WriteLine("Map.img found, extracting map names...");
                     foreach (Wz_Node regionNode in mapImg.Nodes)
                     {
                         foreach (Wz_Node mapNode in regionNode.Nodes)
@@ -144,9 +116,9 @@ namespace WzComparerR2
                                 string streetName = mapNode.Nodes["streetName"]?.GetValueEx<string>("");
                                 string mapName = mapNode.Nodes["mapName"]?.GetValueEx<string>("");
 
-                                string fullName = string.IsNullOrEmpty(streetName) ? mapName : 
-                                                  string.IsNullOrEmpty(mapName) ? streetName : 
-                                                  $"{streetName}: {mapName}";
+                                string fullName = string.IsNullOrEmpty(streetName) ? mapName :
+                                                string.IsNullOrEmpty(mapName) ? streetName :
+                                                $"{streetName}: {mapName}";
 
                                 mapRegistry.Add(new MapRegistryEntry
                                 {
@@ -173,8 +145,7 @@ namespace WzComparerR2
 
             // Extract Footholds from Map.wz
             Console.WriteLine("Extracting Footholds...");
-            
-            // Fix: Try finding "Map.wz" or "Map" at the root level safely
+
             Wz_Node mapWz = wz.WzNode.FindNodeByPath("Map.wz") ?? wz.WzNode.FindNodeByPath("Map");
             if (mapWz == null)
             {
@@ -183,32 +154,29 @@ namespace WzComparerR2
 
             if (mapWz != null)
             {
-                // Unwrap Wz_File just like String.wz
-                Wz_File mapFile = mapWz.GetValueEx<Wz_File>(null);
-                Wz_Node mapWzRoot = mapFile?.Node ?? mapWz;
+                Console.WriteLine($"Map node found: {mapWz.Text}, children: {mapWz.Nodes.Count}");
 
-                Console.WriteLine($"Map searchRoot: {mapWzRoot.Text}, children: {mapWzRoot.Nodes.Count}");
-                
-
-                Wz_Node mapDir = mapWzRoot.FindNodeByPath("Map");
+                Wz_Node mapDir = mapWz.FindNodeByPath("Map");
                 if (mapDir == null)
-                    mapDir = mapWzRoot;
+                    mapDir = mapWz;
+
+                Console.WriteLine($"Map dir node: {mapDir.Text}, children: {mapDir.Nodes.Count}");
 
                 int totalMapsProcessed = 0;
                 foreach (Wz_Node mapPrefixDir in mapDir.Nodes)
                 {
                     if (mapPrefixDir.Text.StartsWith("Map") && mapPrefixDir.Nodes.Count > 0)
                     {
-                        foreach (Wz_Node mapImg in mapPrefixDir.Nodes)
+                        foreach (Wz_Node mapImgNode in mapPrefixDir.Nodes)
                         {
-                            if (!mapImg.Text.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
+                            if (!mapImgNode.Text.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
                                 continue;
 
-                            string mapIdStr = mapImg.Text.Substring(0, mapImg.Text.Length - 4);
+                            string mapIdStr = mapImgNode.Text.Substring(0, mapImgNode.Text.Length - 4);
                             if (!int.TryParse(mapIdStr, out int mapId))
                                 continue;
 
-                            Wz_Image img = mapImg.GetValueEx<Wz_Image>(null);
+                            Wz_Image img = mapImgNode.GetValueEx<Wz_Image>(null);
                             if (img != null && img.TryExtract())
                             {
                                 Wz_Node footholdNode = img.Node.FindNodeByPath("foothold");
