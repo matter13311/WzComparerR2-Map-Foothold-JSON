@@ -31,6 +31,13 @@ namespace WzComparerR2
                 return;
             }
 
+            if (args.Length > 0 && args[0] == "skill-export")
+            {
+                AttachConsole(ATTACH_PARENT_PROCESS);
+                JsonDataExporter.RunSkillExport(args);
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
